@@ -180,7 +180,8 @@ def count_trainable_parameters(model):
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
-
+    torch.backends.cuda.matmul.allow_tf32 = True
+    
     with open("input.txt", "r", encoding="utf-8") as f:
         text = f.read()
 
@@ -191,8 +192,8 @@ if __name__ == "__main__":
 
     model = Llama(
         vocab_size=vocab_size,
-        embed_size=256,
-        num_layers=6,
+        embed_size=521,
+        num_layers=12,
         heads=8,
         kv=4,
     ).to(device)
@@ -277,7 +278,7 @@ if __name__ == "__main__":
     print(f"Total parameters: {count_parameters(model):,}")
     print(f"Trainable parameters: {count_trainable_parameters(model):,}")
 
-    torch.save(model.state_dict(), "llama_shakespeare.pt")
+    torch.save(model.state_dict(), "smol_poet.pt")
     print("Model saved.")
 
     print("Test Generation : ")

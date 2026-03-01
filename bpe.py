@@ -187,30 +187,30 @@ if __name__ == "__main__":
         text = f.read()
 
     tokenizer = BPE()
-    # tokenizer.train(
-    #     text,
-    #     vocab_size=1000,
-    #     allowed_special={"<s>", "</s>", "<unk>"}
-    # )
+    tokenizer.train(
+        text,
+        vocab_size=1000,
+        allowed_special={"<s>", "</s>", "<unk>"}
+    )
 
-    # print("VOCAB Size : ")
-    # print(len(tokenizer.vocab))
-    # print("BPE Merges Size : ")
-    # print(len(tokenizer.bpe_merges))
+    print("VOCAB Size : ")
+    print(len(tokenizer.vocab))
+    print("BPE Merges Size : ")
+    print(len(tokenizer.bpe_merges))
 
-    # input_text = "Jack embraced beauty through art and life."
-    # token_ids = tokenizer.encode(input_text)
-    # print(token_ids)
+    input_text = "Jack embraced beauty through art and life."
+    token_ids = tokenizer.encode(input_text)
+    print(token_ids)
 
-    # print(tokenizer.decode(
-    #     tokenizer.encode("This is some text.")
-    # ))
+    print(tokenizer.decode(
+        tokenizer.encode("This is some text.")
+    ))
 
-    # tokenizer.save_tokenizer(vocab_path="vocab.json", merges_path="bpe_merges.txt")
+    tokenizer.save_tokenizer(vocab_path="vocab.json", merges_path="bpe_merges.txt")
 
-    tokenizer.load_tokenizer("vocab.json", "bpe_merges.txt")
+    # tokenizer.load_tokenizer("vocab.json", "bpe_merges.txt")
 
-    s = "To be, or not to be."
-    ids = tokenizer.encode(s)
-    print(ids)
-    print(tokenizer.decode(ids))
+    # s = "To be, or not to be."
+    # ids = tokenizer.encode(s)
+    # print(ids)
+    # print(tokenizer.decode(ids))
