@@ -183,14 +183,14 @@ class BPE:
 
 
 if __name__ == "__main__":
-    with open("input.txt", "r", encoding="utf-8") as f:
+    with open("shakespear.txt", "r", encoding="utf-8") as f:
         text = f.read()
 
     tokenizer = BPE()
     tokenizer.train(
         text,
         vocab_size=1000,
-        allowed_special={"<s>", "</s>", "<unk>"}
+        allowed_special={"<s>", "</s>", "<unk>", "<|poem|>", "<|endpoem|>"}
     )
 
     print("VOCAB Size : ")

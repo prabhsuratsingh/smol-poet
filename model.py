@@ -192,7 +192,7 @@ if __name__ == "__main__":
 
     model = Llama(
         vocab_size=vocab_size,
-        embed_size=521,
+        embed_size=512,
         num_layers=12,
         heads=8,
         kv=4,
