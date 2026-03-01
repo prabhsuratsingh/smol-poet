@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_seq_len=4096, base=10000):
+    def __init__(self, dim, max_seq_len=16384, base=10000):
         super().__init__()
         self.dim = dim
 

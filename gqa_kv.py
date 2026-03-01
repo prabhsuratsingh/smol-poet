@@ -22,7 +22,7 @@ class GroupedQueryAttention(nn.Module):
 
         self.Lq = nn.Linear(embed_size, embed_size, bias=False)
         self.Lkv = nn.Linear(embed_size, 2*self.kv_dim, bias=False)
-        self.fc_out = nn.Linear(embed_size, embed_size)
+        self.fc_out = nn.Linear(embed_size, embed_size, bias=False)
         self.attn_dropout = nn.Dropout(dropout)
 
         self.device = device
@@ -68,13 +68,22 @@ class GroupedQueryAttention(nn.Module):
         q_len = seq_len
         k_len = K.shape[2]
 
-        causal = torch.tril(
-            torch.ones(q_len, k_len, device=seq.device),
-            diagonal=past_len
-        )
+        # causal = torch.tril(
+        #     torch.ones(q_len, k_len, device=seq.device),
+        #     diagonal=past_len
+        # )
+
+        i = torch.arange(q_len, device=seq.device)[:, None]
+        j = torch.arange(k_len, device=seq.device)[None, :]
+        causal = (j <= i + past_len)
+
+        # energy = energy.masked_fill(
+        #     causal.unsqueeze(0).unsqueeze(0) == 0,
+        #     torch.finfo(energy.dtype).min
+        # )
 
         energy = energy.masked_fill(
-            causal.unsqueeze(0).unsqueeze(0) == 0,
+            ~causal.unsqueeze(0).unsqueeze(0),
             torch.finfo(energy.dtype).min
         )
 
