@@ -23,12 +23,13 @@ LR = 1e-5
 RL_STEPS = 3000
 
 PROMPTS = [
-    "ROMEO:",
-    "JULIET:",
-    "KING:",
-    "First Citizen:",
-    "O my lord,",
-    "To be, or not to be",
+    "O ",
+    "Fair ",
+    "Upon the night",
+    "My love,",
+    "Shall I compare thee",
+    "When in disgrace",
+    "If music be the food",
 ]
 
 
