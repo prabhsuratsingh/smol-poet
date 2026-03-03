@@ -201,12 +201,12 @@ if __name__ == "__main__":
     dataset = LlamaDataset(
         text=text,
         tokenizer=tokenizer,
-        block_size=128
+        block_size=512
     )
 
     loader = DataLoader(
         dataset,
-        batch_size=32,
+        batch_size=128,
         shuffle=True,
         drop_last=True
     )
