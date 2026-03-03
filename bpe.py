@@ -1,4 +1,5 @@
 import json
+import random
 from typing import Counter
 
 class BPE:
@@ -184,7 +185,12 @@ class BPE:
 
 if __name__ == "__main__":
     with open("poetry_corpus.txt", "r", encoding="utf-8") as f:
-        text = f.read()
+        lines = f.read()
+
+    sample_size = 7_000_000
+    sampled_lines = random.sample(lines, min(sample_size, len(lines)))
+
+    text = "".join(sampled_lines)
 
     tokenizer = BPE()
     tokenizer.train(
