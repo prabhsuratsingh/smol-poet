@@ -9,3 +9,4 @@ wheels/
 # Virtual environments
 .venv
 poetry_corpus.txt
+*.gz

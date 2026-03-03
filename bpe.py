@@ -183,7 +183,7 @@ class BPE:
 
 
 if __name__ == "__main__":
-    with open("shakespear.txt", "r", encoding="utf-8") as f:
+    with open("poetry_corpus.txt", "r", encoding="utf-8") as f:
         text = f.read()
 
     tokenizer = BPE()

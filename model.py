@@ -182,7 +182,7 @@ if __name__ == "__main__":
     print(f"Device : {device}")
     torch.backends.cuda.matmul.allow_tf32 = True
     
-    with open("input.txt", "r", encoding="utf-8") as f:
+    with open("poetry_corpus.txt", "r", encoding="utf-8") as f:
         text = f.read()
 
     tokenizer = BPE()
