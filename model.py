@@ -9,6 +9,9 @@ from bpe import BPE
 from gqa_kv import GroupedQueryAttention
 from swi_glu import SwiGLU
 
+CHECKPOINT_DIR = "checkpoints"
+os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+
 class TransformerBlock(nn.Module):
     def __init__(self, embed_size, heads, kv, dropout, device):
         super(TransformerBlock, self).__init__()
@@ -189,32 +192,37 @@ def save_checkpoint(model, optimizer, epoch, global_step, keep_last_n=3):
     }
 
     filename = f"checkpoint_step_{global_step}.pt"
-    torch.save(checkpoint, filename)
+    filepath = os.path.join(CHECKPOINT_DIR, filename)
+
+    # atomic save (safe)
+    tmp_path = filepath + ".tmp"
+    torch.save(checkpoint, tmp_path)
+    os.replace(tmp_path, filepath)
+
     print(f"Checkpoint saved at step {global_step}")
 
     pattern = r"checkpoint_step_(\d+)\.pt"
     checkpoints = []
 
-    for f in os.listdir("."):
+    for f in os.listdir(CHECKPOINT_DIR):
         match = re.match(pattern, f)
         if match:
             step = int(match.group(1))
             checkpoints.append((step, f))
 
-    checkpoints.sort() 
+    checkpoints.sort()
 
-    # remove older ones
     if len(checkpoints) > keep_last_n:
         to_delete = checkpoints[:-keep_last_n]
         for _, fname in to_delete:
-            os.remove(fname)
+            os.remove(os.path.join(CHECKPOINT_DIR, fname))
             print(f"Deleted old checkpoint {fname}")
 
 def get_latest_checkpoint():
     pattern = r"checkpoint_step_(\d+)\.pt"
     checkpoints = []
 
-    for f in os.listdir("."):
+    for f in os.listdir(CHECKPOINT_DIR):
         match = re.match(pattern, f)
         if match:
             step = int(match.group(1))
@@ -224,7 +232,8 @@ def get_latest_checkpoint():
         return None
 
     checkpoints.sort()
-    return checkpoints[-1][1] 
+    latest_file = checkpoints[-1][1]
+    return os.path.join(CHECKPOINT_DIR, latest_file)
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
