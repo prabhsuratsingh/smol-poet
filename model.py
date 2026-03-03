@@ -2,6 +2,8 @@ import time
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+import os 
+import re
 
 from bpe import BPE
 from gqa_kv import GroupedQueryAttention
@@ -177,6 +179,53 @@ def count_parameters(model):
 def count_trainable_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+
+def save_checkpoint(model, optimizer, epoch, global_step, keep_last_n=3):
+    checkpoint = {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "epoch": epoch,
+        "global_step": global_step,
+    }
+
+    filename = f"checkpoint_step_{global_step}.pt"
+    torch.save(checkpoint, filename)
+    print(f"Checkpoint saved at step {global_step}")
+
+    pattern = r"checkpoint_step_(\d+)\.pt"
+    checkpoints = []
+
+    for f in os.listdir("."):
+        match = re.match(pattern, f)
+        if match:
+            step = int(match.group(1))
+            checkpoints.append((step, f))
+
+    checkpoints.sort() 
+
+    # remove older ones
+    if len(checkpoints) > keep_last_n:
+        to_delete = checkpoints[:-keep_last_n]
+        for _, fname in to_delete:
+            os.remove(fname)
+            print(f"Deleted old checkpoint {fname}")
+
+def get_latest_checkpoint():
+    pattern = r"checkpoint_step_(\d+)\.pt"
+    checkpoints = []
+
+    for f in os.listdir("."):
+        match = re.match(pattern, f)
+        if match:
+            step = int(match.group(1))
+            checkpoints.append((step, f))
+
+    if not checkpoints:
+        return None
+
+    checkpoints.sort()
+    return checkpoints[-1][1] 
+
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
@@ -214,15 +263,29 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
     criterion = nn.CrossEntropyLoss()
 
+    latest_ckpt = get_latest_checkpoint()
+
+    global_step = 0
+    start_epoch = 0
+
+    if latest_ckpt is not None:
+        print(f"Resuming from {latest_ckpt}")
+        checkpoint = torch.load(latest_ckpt, map_location=device)
+
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        global_step = checkpoint["global_step"]
+        start_epoch = checkpoint["epoch"] + 1
+
     flops_per_token = estimate_flops_per_token(model)
 
     num_epochs = 5
     log_interval = 100
-    global_step = 0
 
     model.train()
 
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         epoch_loss = 0.0
         num_batches = 0
         running_loss = 0.0
@@ -246,6 +309,9 @@ if __name__ == "__main__":
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+
+            if global_step % 50000 == 0 and global_step > 0:
+                save_checkpoint(model, optimizer, epoch, global_step, keep_last_n=3)
 
             step_time = time.time() - step_start
 
