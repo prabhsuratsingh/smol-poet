@@ -10,3 +10,4 @@ wheels/
 .venv
 poetry_corpus.txt
 *.gz
+from_amd_gpu/

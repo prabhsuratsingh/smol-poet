@@ -235,6 +235,7 @@ def get_latest_checkpoint():
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
+    torch.set_float32_matmul_precision("high")
     torch.backends.cuda.matmul.allow_tf32 = True
     
     with open("poetry_corpus.txt", "r", encoding="utf-8") as f:
@@ -303,18 +304,20 @@ if __name__ == "__main__":
         for step, (x, y) in enumerate(loader):
             global_step += 1
 
-            x = x.to(device)
-            y = y.to(device)
+            x = x.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True)
 
             step_start = time.time()
 
-            logits, _ = model(x)
-            loss = criterion(
-                logits.reshape(-1, logits.size(-1)),
-                y.reshape(-1)
-            )
-
             optimizer.zero_grad(set_to_none=True)
+
+            with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+                logits, _ = model(x)
+                loss = criterion(
+                    logits.reshape(-1, logits.size(-1)),
+                    y.reshape(-1)
+                )
+
             loss.backward()
             optimizer.step()
 
