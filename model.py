@@ -121,27 +121,24 @@ class Llama(nn.Module):
     
 class LlamaDataset(torch.utils.data.Dataset):
     def __init__(self, text, tokenizer, block_size):
-        self.tokenizer = tokenizer
         self.block_size = block_size
 
-        self.tokens = tokenizer.encode(
+        tokens = tokenizer.encode(
             text,
-            allowed_special={"<s>", "</s>", "<unk>"}
-
+            allowed_special={"<s>", "</s>", "<unk>", "<|poem|>", "<|endpoem|>"}
         )
+
+        self.tokens = torch.tensor(tokens, dtype=torch.long)
 
     def __len__(self):
-        return len(self.tokens) - self.block_size
+        return (len(self.tokens) - 1) // self.block_size
 
     def __getitem__(self, idx):
-        x = torch.tensor(
-            self.tokens[idx : idx + self.block_size],
-            dtype=torch.long
-        )
-        y = torch.tensor(
-            self.tokens[idx + 1 : idx + self.block_size + 1],
-            dtype=torch.long
-        )
+        start = idx * self.block_size
+
+        x = self.tokens[start:start+self.block_size]
+        y = self.tokens[start+1:start+self.block_size+1]
+
         return x, y
     
 @torch.no_grad()
@@ -266,7 +263,9 @@ if __name__ == "__main__":
         dataset,
         batch_size=128,
         shuffle=True,
-        drop_last=True
+        drop_last=True,
+        num_workers=8,
+        pin_memory=True
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
@@ -311,8 +310,8 @@ if __name__ == "__main__":
 
             logits, _ = model(x)
             loss = criterion(
-                logits.view(-1, logits.size(-1)),
-                y.view(-1)
+                logits.reshape(-1, logits.size(-1)),
+                y.reshape(-1)
             )
 
             optimizer.zero_grad(set_to_none=True)
