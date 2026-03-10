@@ -17,9 +17,10 @@ MERGES_PATH = "bpe_merges.txt"
 
 TEMPERATURE = 0.8
 MAX_NEW_TOKENS = 64
-K = 4                 
+K = 4
 BETA_KL = 0.02
-LR = 1e-5
+CLIP_EPS = 0.2
+LR = 1e-6
 RL_STEPS = 3000
 
 PROMPTS = [
@@ -59,7 +60,7 @@ def sequence_logprob(model, tokens):
     logp = F.log_softmax(logits, dim=-1)
     token_logp = logp.gather(-1, y.unsqueeze(-1)).squeeze(-1)
 
-    return token_logp.sum(dim=1) 
+    return token_logp.sum(dim=1)
 
 
 @torch.no_grad()
@@ -73,19 +74,27 @@ def sample(model, prompt):
     logits, kv_cache = model(tokens, kv_cache)
 
     generated = []
+    logprobs = []
 
     for _ in range(MAX_NEW_TOKENS):
         probs = torch.softmax(logits[:, -1, :] / TEMPERATURE, dim=-1)
         next_token = torch.multinomial(probs, 1)
 
+        logprob = torch.log(probs.gather(-1, next_token))
+
         generated.append(next_token)
+        logprobs.append(logprob)
+
         logits, kv_cache = model(next_token, kv_cache)
 
     gen = torch.cat(generated, dim=1)
     full = torch.cat([tokens, gen], dim=1)
 
+    old_logprob = torch.cat(logprobs).sum()
+
     text = tokenizer.decode(full[0].tolist())
-    return text, full
+
+    return text, full, old_logprob
 
 
 @torch.no_grad()
@@ -95,37 +104,52 @@ def reward_fn(text_tokens):
 
 optimizer = torch.optim.AdamW(policy.parameters(), lr=LR)
 
-
 policy.train()
 
 for step in range(1, RL_STEPS + 1):
+
     prompt = random.choice(PROMPTS)
 
     texts = []
     rewards = []
     token_batches = []
+    old_logprobs = []
 
     for _ in range(K):
-        txt, tokens = sample(policy, prompt)
+
+        txt, tokens, old_lp = sample(policy, prompt)
+
         r = reward_fn(tokens)
 
         texts.append(txt)
         rewards.append(r)
         token_batches.append(tokens)
+        old_logprobs.append(old_lp)
 
     baseline = sum(rewards) / K
     advantages = [r - baseline for r in rewards]
 
     loss = 0
 
-    for A, tokens in zip(advantages, token_batches):
-        logp = sequence_logprob(policy, tokens)
+    for A, tokens, old_lp in zip(advantages, token_batches, old_logprobs):
+
+        new_logp = sequence_logprob(policy, tokens)
+
+        ratio = torch.exp(new_logp - old_lp)
+
+        clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
+
+        ppo_loss = -torch.min(
+            ratio * A,
+            clipped_ratio * A
+        )
 
         with torch.no_grad():
             ref_logp = sequence_logprob(ref_model, tokens)
 
-        kl = (logp - ref_logp)
-        loss = loss + (-A * logp + BETA_KL * kl)
+        kl = new_logp - ref_logp
+
+        loss = loss + (ppo_loss + BETA_KL * kl)
 
     loss = loss / K
 
