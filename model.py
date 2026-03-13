@@ -4,6 +4,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import os 
 import re
+from torch.utils.tensorboard.writer import SummaryWriter
+import csv
 
 from bpe import BPE
 from gqa_kv import GroupedQueryAttention
@@ -232,11 +234,26 @@ def get_latest_checkpoint():
     latest_file = checkpoints[-1][1]
     return os.path.join(CHECKPOINT_DIR, latest_file)
 
+
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
     torch.set_float32_matmul_precision("high")
     torch.backends.cuda.matmul.allow_tf32 = True
+
+    LOG_DIR = "logs"
+    os.makedirs(LOG_DIR, exist_ok=True)
+    writer = SummaryWriter(LOG_DIR)
+
+    csv_file = open("training_metrics.csv", "w", newline="")
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow([
+        "step",
+        "epoch",
+        "loss",
+        "tokens_per_sec",
+        "tflops"
+    ])
     
     with open("poetry_corpus.txt", "r", encoding="utf-8") as f:
         text = f.read()
@@ -319,6 +336,15 @@ if __name__ == "__main__":
                 )
 
             loss.backward()
+            total_norm = 0
+            for p in model.parameters():
+                if p.grad is not None:
+                    param_norm = p.grad.data.norm(2)
+                    total_norm += param_norm.item() ** 2
+            total_norm = total_norm ** 0.5
+
+            writer.add_scalar("train/grad_norm", total_norm, global_step)
+
             optimizer.step()
 
             if global_step % 50000 == 0 and global_step > 0:
@@ -346,7 +372,24 @@ if __name__ == "__main__":
                     f"{tok_per_sec:8.0f} tok/s | "
                     f"{tflops:.2f} TFLOPs"
                 )
+
+                writer.add_scalar("train/loss", avg_loss, global_step)
+                writer.add_scalar("train/tokens_per_sec", tok_per_sec, global_step)
+                writer.add_scalar("train/tflops", tflops, global_step)
+
+                csv_writer.writerow([
+                    global_step,
+                    epoch+1,
+                    avg_loss,
+                    tok_per_sec,
+                    tflops
+                ])
+
                 running_loss = 0.0
+
+            if global_step % 10000 == 0:
+                sample = generate(model, tokenizer, "O gentle night")
+                writer.add_text("generation/sample", sample, global_step)
 
         avg_epoch_loss = epoch_loss / num_batches
         print(f"epoch {epoch+1}/{num_epochs} | avg loss {avg_epoch_loss:.4f}")
@@ -359,4 +402,7 @@ if __name__ == "__main__":
     print("Model saved.")
 
     print("Test Generation : ")
-    print(generate(model, tokenizer, "Once upon a time"))   
+    print(generate(model, tokenizer, "Once upon a time"))
+
+    writer.close()
+    csv_file.close()
