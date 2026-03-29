@@ -11,3 +11,4 @@ wheels/
 poetry_corpus.txt
 *.gz
 from_amd_gpu/
+gutenberg_poetry/
