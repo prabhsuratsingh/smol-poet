@@ -2,16 +2,22 @@ import torch
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
-from model import Llama
 from bpe import BPE
+from model import Llama
 
 device = "cuda"
 
 tokenizer = BPE()
-tokenizer.load_tokenizer("vocab.json", "bpe_merges.txt")
+tokenizer.load_tokenizer("from_amd_gpu/vocab.json", "from_amd_gpu/bpe_merges.txt")
 
-model = Llama(vocab_size=len(tokenizer.vocab)).to(device)
-model.load_state_dict(torch.load("smol_poet.pt"))
+model = Llama(
+    vocab_size=len(tokenizer.vocab),
+    embed_size=512,
+    num_layers=12,
+    heads=8,
+    kv=4,
+).to(device)
+model.load_state_dict(torch.load("from_amd_gpu/smol_poet.pt"))
 
 embeddings = model.decoder.word_embedding.weight.detach().cpu()
 

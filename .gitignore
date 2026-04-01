@@ -9,6 +9,8 @@ wheels/
 # Virtual environments
 .venv
 poetry_corpus.txt
+poetry_corpus_new.txt
 *.gz
 from_amd_gpu/
 gutenberg_poetry/
+*.txt

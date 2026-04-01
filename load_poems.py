@@ -9,7 +9,7 @@ OUT_DIR = Path("gutenberg_poetry")
 RDF_ARCHIVE = OUT_DIR / "rdf-files.tar.bz2"
 RDF_DIR = OUT_DIR / "cache" / "epub"
 RAW_DIR = OUT_DIR / "raw_poetry"
-CORPUS_FILE = OUT_DIR / "poetry_corpus.txt"
+CORPUS_FILE = OUT_DIR / "poetry_corpus_new.txt"
 
 RDF_URL = "https://www.gutenberg.org/cache/epub/feeds/rdf-files.tar.bz2"
 
@@ -139,7 +139,9 @@ def build_corpus():
                 txt = strip_gutenberg(txt)
                 txt = remove_frontmatter(txt)
 
-                txt = "\n".join([l.rstrip() for l in txt.splitlines()])
+                txt = "\n".join(
+                    l.strip() for l in txt.splitlines() if l.strip()
+                )
 
                 if len(txt) < 200:
                     continue
@@ -154,10 +156,10 @@ def build_corpus():
 
 
 if __name__ == "__main__":
-    # download_rdf()
-    # extract_rdf()
-    # ids = find_poetry_ids()
-    # download_books(ids)
+    download_rdf()
+    extract_rdf()
+    ids = find_poetry_ids()
+    download_books(ids)
     build_corpus()
 
     print("\nDone 🎉")
