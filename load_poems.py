@@ -1,15 +1,18 @@
 import os
 import tarfile
 import requests
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
-OUT_DIR = Path("gutenberg_poetry")
+lock = threading.Lock()
+
+OUT_DIR = Path("E:/gutenberg_books")
 RDF_ARCHIVE = OUT_DIR / "rdf-files.tar.bz2"
 RDF_DIR = OUT_DIR / "cache" / "epub"
-RAW_DIR = OUT_DIR / "raw_poetry"
-CORPUS_FILE = OUT_DIR / "poetry_corpus_new.txt"
+RAW_DIR = OUT_DIR / "raw_books"
+CORPUS_FILE = OUT_DIR / "books_corpus.txt"
 
 RDF_URL = "https://www.gutenberg.org/cache/epub/feeds/rdf-files.tar.bz2"
 
@@ -65,28 +68,94 @@ def find_poetry_ids():
     print("Found poetry ids:", len(poetry_ids))
     return poetry_ids
 
+def find_english_ids():
+    ids = []
 
-def download_books(ids):
-    print("Downloading poetry books...")
-    for gid in tqdm(ids):
-        out_path = RAW_DIR / f"{gid}.txt"
-        if out_path.exists():
-            continue
+    print("Scanning RDF for English books...")
 
-        urls = [
-            f"https://www.gutenberg.org/files/{gid}/{gid}-0.txt",
-            f"https://www.gutenberg.org/files/{gid}/{gid}.txt"
-        ]
+    for root, _, files in os.walk(RDF_DIR):
+        for f in files:
+            if not f.endswith(".rdf"):
+                continue
 
-        for url in urls:
+            path = os.path.join(root, f)
+
             try:
-                r = requests.get(url, timeout=20)
-                if r.status_code == 200 and len(r.text) > 500:
-                    out_path.write_text(r.text, encoding="utf-8")
-                    break
+                text = open(path, encoding="utf-8", errors="ignore").read().lower()
+
+                # Keep ONLY English
+                if ">en<" not in text:
+                    continue
+
+                # Optional: skip very small / low-quality entries
+                if "sound" in text or "audiobook" in text:
+                    continue
+
+                if "illustrated" in text:
+                    continue
+
+                if "collection" in text and "poems" not in text:
+                    continue
+
+                gid = f.replace("pg", "").replace(".rdf", "")
+                ids.append(gid)
+
             except:
                 pass
 
+    print("Found English book ids:", len(ids))
+    return ids
+
+# def download_books(ids):
+#     print("Downloading poetry books...")
+#     for gid in tqdm(ids):
+#         out_path = RAW_DIR / f"{gid}.txt"
+#         if out_path.exists():
+#             continue
+
+#         urls = [
+#             f"https://www.gutenberg.org/files/{gid}/{gid}-0.txt",
+#             f"https://www.gutenberg.org/files/{gid}/{gid}.txt"
+#         ]
+
+#         for url in urls:
+#             try:
+#                 r = requests.get(url, timeout=20)
+#                 if r.status_code == 200 and len(r.text) > 500:
+#                     out_path.write_text(r.text, encoding="utf-8")
+#                     break
+#             except:
+#                 pass
+
+def download_one(gid):
+    out_path = RAW_DIR / f"{gid}.txt"
+    if out_path.exists():
+        return
+
+    urls = [
+        f"https://www.gutenberg.org/files/{gid}/{gid}-0.txt",
+        f"https://www.gutenberg.org/files/{gid}/{gid}.txt"
+    ]
+
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=20)
+            if r.status_code == 200 and len(r.text) > 500:
+                with lock: 
+                    out_path.write_text(r.text, encoding="utf-8")
+                return
+        except:
+            pass
+
+
+def download_books(ids, max_workers=20):
+    print(f"Downloading with {max_workers} threads...")
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(download_one, gid) for gid in ids]
+
+        for _ in tqdm(as_completed(futures), total=len(futures)):
+            pass
 
 def strip_gutenberg(text):
     lower = text.lower()
@@ -146,9 +215,9 @@ def build_corpus():
                 if len(txt) < 200:
                     continue
 
-                out.write("<|poem|>\n")
+                out.write("<|book|>\n")
                 out.write(txt.strip())
-                out.write("\n<|endpoem|>\n\n")
+                out.write("\n<|endbook|>\n\n")
             except:
                 pass
 
@@ -158,8 +227,8 @@ def build_corpus():
 if __name__ == "__main__":
     download_rdf()
     extract_rdf()
-    ids = find_poetry_ids()
-    download_books(ids)
+    ids = find_english_ids()
+    download_books(ids, max_workers=30)
     build_corpus()
 
     print("\nDone 🎉")
