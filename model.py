@@ -143,6 +143,10 @@ class LlamaDataset(torch.utils.data.Dataset):
 
         return x, y
     
+
+'''
+Generate Responses
+'''
 @torch.no_grad()
 def generate(model, tokenizer, prompt, max_new_tokens=50, device="cuda"):
     model.eval()
@@ -164,6 +168,9 @@ def generate(model, tokenizer, prompt, max_new_tokens=50, device="cuda"):
     return tokenizer.decode(tokens[0].tolist())
 
 
+'''
+Utils
+'''
 def estimate_flops_per_token(model):
     return 6 * count_parameters(model)
 
@@ -235,6 +242,9 @@ def get_latest_checkpoint():
     return os.path.join(CHECKPOINT_DIR, latest_file)
 
 
+'''
+Main
+'''
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")

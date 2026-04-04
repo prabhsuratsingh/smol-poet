@@ -1,19 +1,38 @@
 import copy
 import random
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
+import csv
+import os
 
 from model import Llama
 from bpe import BPE
+
+LOG_DIR = "rl_logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+
+writer = SummaryWriter(LOG_DIR)
+
+csv_file = open("rl_metrics.csv", "w", newline="")
+csv_writer = csv.writer(csv_file)
+csv_writer.writerow([
+    "step",
+    "reward",
+    "loss",
+    "kl",
+    "ratio"
+])
 
 torch.backends.cuda.matmul.allow_tf32 = True
 
 DEVICE = "cuda"
 DTYPE = torch.bfloat16
 
-PRETRAINED_PATH = "smol_poet.pt"
-VOCAB_PATH = "vocab.json"
-MERGES_PATH = "bpe_merges.txt"
+PRETRAINED_PATH = "from_amd_gpu/smol_poet.pt"
+VOCAB_PATH = "from_amd_gpu/vocab.json"
+MERGES_PATH = "from_amd_gpu/bpe_merges.txt"
 
 TEMPERATURE = 0.8
 MAX_NEW_TOKENS = 64
@@ -39,7 +58,13 @@ tokenizer.load_tokenizer(VOCAB_PATH, MERGES_PATH)
 vocab_size = len(tokenizer.vocab)
 
 
-policy = Llama(vocab_size=vocab_size).to(DEVICE)
+policy = Llama(
+    vocab_size=vocab_size,
+    embed_size=512,
+    num_layers=12,
+    heads=8,
+    kv=4,
+).to(DEVICE)
 policy.load_state_dict(torch.load(PRETRAINED_PATH, map_location=DEVICE))
 policy = policy.to(dtype=DTYPE)
 
@@ -90,7 +115,7 @@ def sample(model, prompt):
     gen = torch.cat(generated, dim=1)
     full = torch.cat([tokens, gen], dim=1)
 
-    old_logprob = torch.cat(logprobs).sum()
+    old_logprob = torch.cat(logprobs).sum().detach()
 
     text = tokenizer.decode(full[0].tolist())
 
@@ -107,7 +132,6 @@ optimizer = torch.optim.AdamW(policy.parameters(), lr=LR)
 policy.train()
 
 for step in range(1, RL_STEPS + 1):
-
     prompt = random.choice(PROMPTS)
 
     texts = []
@@ -127,41 +151,69 @@ for step in range(1, RL_STEPS + 1):
         old_logprobs.append(old_lp)
 
     baseline = sum(rewards) / K
-    advantages = [r - baseline for r in rewards]
+    advantages = torch.tensor(rewards, device=DEVICE)
+    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
     loss = 0
+    total_kl = 0
+    total_ratio = 0
 
     for A, tokens, old_lp in zip(advantages, token_batches, old_logprobs):
 
         new_logp = sequence_logprob(policy, tokens)
 
         ratio = torch.exp(new_logp - old_lp)
-
         clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
 
         ppo_loss = -torch.min(
             ratio * A,
             clipped_ratio * A
-        )
+        ).mean()
 
         with torch.no_grad():
             ref_logp = sequence_logprob(ref_model, tokens)
 
-        kl = new_logp - ref_logp
+        kl = (new_logp - ref_logp).mean()
 
         loss = loss + (ppo_loss + BETA_KL * kl)
 
+        total_kl += kl.item()
+        total_ratio += ratio.item()
+
     loss = loss / K
+    avg_kl = total_kl / K
+    avg_ratio = total_ratio / K
 
     optimizer.zero_grad()
     loss.backward()
+    nn.utils.clip_grad_norm_(policy.parameters(), 1.0)
     optimizer.step()
+
+    writer.add_scalar("rl/reward", baseline, step)
+    writer.add_scalar("rl/loss", loss.item(), step)
+    writer.add_scalar("rl/kl", avg_kl, step)
+    writer.add_scalar("rl/ratio", avg_ratio, step)
+
+    csv_writer.writerow([
+        step,
+        baseline,
+        loss.item(),
+        avg_kl,
+        avg_ratio
+    ])
 
     if step % 50 == 0:
         print(f"step {step:5d} | reward {baseline:.3f}")
 
+    if step % 200 == 0:
+        sample_text, _, _ = sample(policy, "Shall I compare thee")
+        writer.add_text("rl/sample", sample_text, step)
+
     if step % 500 == 0:
-        torch.save(policy.state_dict(), f"smol_poet_rl_step{step}.pt")
+        torch.save(policy.state_dict(), f"rl/smol_poet_rl_step{step}.pt")
+
 
 print("RL training complete.")
 torch.save(policy.state_dict(), "smol_poet_rl_final.pt")
+writer.close()
+csv_file.close()
