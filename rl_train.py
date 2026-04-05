@@ -34,10 +34,10 @@ PRETRAINED_PATH = "from_amd_gpu/smol_poet.pt"
 VOCAB_PATH = "from_amd_gpu/vocab.json"
 MERGES_PATH = "from_amd_gpu/bpe_merges.txt"
 
-TEMPERATURE = 0.8
+TEMPERATURE = 0.9
 MAX_NEW_TOKENS = 64
-K = 4
-BETA_KL = 0.02
+K = 8
+BETA_KL = 0.005
 CLIP_EPS = 0.2
 LR = 1e-6
 RL_STEPS = 3000
@@ -122,10 +122,18 @@ def sample(model, prompt):
     return text, full, old_logprob
 
 
+# def reward_fn(text_tokens):
+#     return sequence_logprob(reward_model, text_tokens).item()
 @torch.no_grad()
-def reward_fn(text_tokens):
-    return sequence_logprob(reward_model, text_tokens).item()
+def reward_fn(tokens):
+    text = tokenizer.decode(tokens[0].tolist())
 
+    base = sequence_logprob(reward_model, tokens).item()
+
+    keywords = ["thee", "thou", "thy", "doth", "hath"]
+    style_bonus = sum(word in text for word in keywords)
+
+    return base + 2.0 * style_bonus
 
 optimizer = torch.optim.AdamW(policy.parameters(), lr=LR)
 
