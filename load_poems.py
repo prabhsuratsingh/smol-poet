@@ -12,7 +12,7 @@ OUT_DIR = Path("E:/gutenberg_books")
 RDF_ARCHIVE = OUT_DIR / "rdf-files.tar.bz2"
 RDF_DIR = OUT_DIR / "cache" / "epub"
 RAW_DIR = OUT_DIR / "raw_books"
-CORPUS_FILE = OUT_DIR / "books_corpus.txt"
+CORPUS_FILE = OUT_DIR / "books_corpus_cleaned.txt"
 
 RDF_URL = "https://www.gutenberg.org/cache/epub/feeds/rdf-files.tar.bz2"
 
@@ -199,6 +199,21 @@ def remove_frontmatter(text):
 
     return text
 
+import re
+
+def clean_text_keep_format(text):
+
+    # Keep letters, spaces, newline, apostrophes, and periods
+    text = re.sub(r"[^A-Za-z\s\n\.\']", '', text)
+
+    # Normalize multiple spaces (but keep line structure)
+    text = re.sub(r'[ ]{2,}', ' ', text)
+
+    # Optional: remove spaces before periods (cleanup)
+    text = re.sub(r' \.', '.', text)
+
+    return text
+
 def build_corpus():
     print("Building merged corpus...")
     with open(CORPUS_FILE, "w", encoding="utf-8") as out:
@@ -207,6 +222,7 @@ def build_corpus():
                 txt = file.read_text(encoding="utf-8", errors="ignore")
                 txt = strip_gutenberg(txt)
                 txt = remove_frontmatter(txt)
+                txt = clean_text_keep_format(txt)
 
                 txt = "\n".join(
                     l.strip() for l in txt.splitlines() if l.strip()
@@ -225,10 +241,10 @@ def build_corpus():
 
 
 if __name__ == "__main__":
-    download_rdf()
-    extract_rdf()
-    ids = find_english_ids()
-    download_books(ids, max_workers=30)
+    # download_rdf()
+    # extract_rdf()
+    # ids = find_english_ids()
+    # download_books(ids, max_workers=30)
     build_corpus()
 
     print("\nDone 🎉")
