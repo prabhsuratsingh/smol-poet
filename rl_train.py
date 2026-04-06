@@ -10,6 +10,16 @@ import os
 from model import Llama
 from bpe import BPE
 
+def save_checkpoint(step, policy, optimizer, path):
+    checkpoint = {
+        "step": step,
+        "model_state": policy.state_dict(),
+        "optimizer_state": optimizer.state_dict(),
+        "rng_state": torch.get_rng_state(),
+        "cuda_rng_state": torch.cuda.get_rng_state_all()
+    }
+    torch.save(checkpoint, path)
+
 LOG_DIR = "rl_logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -121,9 +131,6 @@ def sample(model, prompt):
 
     return text, full, old_logprob
 
-
-# def reward_fn(text_tokens):
-#     return sequence_logprob(reward_model, text_tokens).item()
 @torch.no_grad()
 def reward_fn(tokens):
     text = tokenizer.decode(tokens[0].tolist())
@@ -139,7 +146,24 @@ optimizer = torch.optim.AdamW(policy.parameters(), lr=LR)
 
 policy.train()
 
-for step in range(1, RL_STEPS + 1):
+RESUME_PATH = "rl/checkpoint_step1000.pt"
+start_step = 1
+
+if RESUME_PATH and os.path.exists(RESUME_PATH):
+    print(f"Loading checkpoint from {RESUME_PATH}")
+    checkpoint = torch.load(RESUME_PATH, map_location=DEVICE)
+
+    policy.load_state_dict(checkpoint["model_state"])
+    optimizer.load_state_dict(checkpoint["optimizer_state"])
+
+    start_step = checkpoint["step"] + 1
+
+    torch.set_rng_state(checkpoint["rng_state"])
+    torch.cuda.set_rng_state_all(checkpoint["cuda_rng_state"])
+
+    print(f"Resuming from step {start_step}")
+
+for step in range(start_step, RL_STEPS + 1):
     prompt = random.choice(PROMPTS)
 
     texts = []
@@ -218,7 +242,7 @@ for step in range(1, RL_STEPS + 1):
         writer.add_text("rl/sample", sample_text, step)
 
     if step % 500 == 0:
-        torch.save(policy.state_dict(), f"rl/smol_poet_rl_step{step}.pt")
+        save_checkpoint(step, policy, optimizer, f"rl/checkpoint_step{step}.pt")
 
 
 print("RL training complete.")
