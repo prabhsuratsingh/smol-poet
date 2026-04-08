@@ -15,20 +15,10 @@ def save_checkpoint(step, policy, optimizer, path):
         "step": step,
         "model_state": policy.state_dict(),
         "optimizer_state": optimizer.state_dict(),
-        "rng_state": torch.get_rng_state(),
-        "cuda_rng_state": torch.cuda.get_rng_state_all()
+        "rng_state": torch.get_rng_state().clone().cpu(),
+        "cuda_rng_state": [s.clone().cpu() for s in torch.cuda.get_rng_state_all()]
     }
     torch.save(checkpoint, path)
-
-# def save_checkpoint(step, policy, optimizer, path):
-#     checkpoint = {
-#         "step": step,
-#         "model_state": policy.state_dict(),
-#         "optimizer_state": optimizer.state_dict(),
-#         "rng_state": torch.get_rng_state().clone().cpu(),
-#         "cuda_rng_state": [s.clone().cpu() for s in torch.cuda.get_rng_state_all()]
-#     }
-#     torch.save(checkpoint, path)
 
 LOG_DIR = "rl_logs"
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -48,7 +38,7 @@ csv_writer.writerow([
 torch.backends.cuda.matmul.allow_tf32 = True
 
 DEVICE = "cuda"
-DTYPE = torch.bfloat16
+DTYPE = torch.float32
 
 PRETRAINED_PATH = "from_amd_gpu/smol_poet.pt"
 VOCAB_PATH = "from_amd_gpu/vocab.json"
@@ -173,35 +163,10 @@ if RESUME_PATH and os.path.exists(RESUME_PATH):
 
     start_step = checkpoint["step"] + 1
 
-    rng_state = checkpoint["rng_state"]
+    torch.set_rng_state(checkpoint["rng_state"])
 
-    if not isinstance(rng_state, torch.Tensor):
-        rng_state = torch.tensor(rng_state, dtype=torch.uint8)
-    else:
-        rng_state = rng_state.clone().detach()
-
-    if rng_state.dtype != torch.uint8:
-        rng_state = rng_state.to(torch.uint8)
-
-    rng_state = rng_state.cpu()
-
-    torch.set_rng_state(rng_state)
-
-    cuda_rng_state = checkpoint["cuda_rng_state"]
-
-    fixed_states = []
-    for s in cuda_rng_state:
-        if not isinstance(s, torch.Tensor):
-            s = torch.tensor(s, dtype=torch.uint8)
-        else:
-            s = s.clone().detach()
-
-        if s.dtype != torch.uint8:
-            s = s.to(torch.uint8)
-
-        fixed_states.append(s.cpu())
-
-    torch.cuda.set_rng_state_all(fixed_states)
+    if torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(checkpoint["cuda_rng_state"])
 
     print(f"Resuming from step {start_step}")
 
