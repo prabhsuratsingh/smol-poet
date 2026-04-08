@@ -20,6 +20,16 @@ def save_checkpoint(step, policy, optimizer, path):
     }
     torch.save(checkpoint, path)
 
+# def save_checkpoint(step, policy, optimizer, path):
+#     checkpoint = {
+#         "step": step,
+#         "model_state": policy.state_dict(),
+#         "optimizer_state": optimizer.state_dict(),
+#         "rng_state": torch.get_rng_state().clone().cpu(),
+#         "cuda_rng_state": [s.clone().cpu() for s in torch.cuda.get_rng_state_all()]
+#     }
+#     torch.save(checkpoint, path)
+
 LOG_DIR = "rl_logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -146,20 +156,52 @@ optimizer = torch.optim.AdamW(policy.parameters(), lr=LR)
 
 policy.train()
 
-RESUME_PATH = "rl/checkpoint_step1000.pt"
+RESUME_PATH = "rl/checkpoint_step2500.pt"
 start_step = 1
 
 if RESUME_PATH and os.path.exists(RESUME_PATH):
     print(f"Loading checkpoint from {RESUME_PATH}")
-    checkpoint = torch.load(RESUME_PATH, map_location=DEVICE)
+
+    checkpoint = torch.load(
+        RESUME_PATH,
+        map_location=DEVICE,
+        weights_only=True 
+    )
 
     policy.load_state_dict(checkpoint["model_state"])
     optimizer.load_state_dict(checkpoint["optimizer_state"])
 
     start_step = checkpoint["step"] + 1
 
-    torch.set_rng_state(checkpoint["rng_state"])
-    torch.cuda.set_rng_state_all(checkpoint["cuda_rng_state"])
+    rng_state = checkpoint["rng_state"]
+
+    if not isinstance(rng_state, torch.Tensor):
+        rng_state = torch.tensor(rng_state, dtype=torch.uint8)
+    else:
+        rng_state = rng_state.clone().detach()
+
+    if rng_state.dtype != torch.uint8:
+        rng_state = rng_state.to(torch.uint8)
+
+    rng_state = rng_state.cpu()
+
+    torch.set_rng_state(rng_state)
+
+    cuda_rng_state = checkpoint["cuda_rng_state"]
+
+    fixed_states = []
+    for s in cuda_rng_state:
+        if not isinstance(s, torch.Tensor):
+            s = torch.tensor(s, dtype=torch.uint8)
+        else:
+            s = s.clone().detach()
+
+        if s.dtype != torch.uint8:
+            s = s.to(torch.uint8)
+
+        fixed_states.append(s.cpu())
+
+    torch.cuda.set_rng_state_all(fixed_states)
 
     print(f"Resuming from step {start_step}")
 
