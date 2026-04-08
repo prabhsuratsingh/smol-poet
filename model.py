@@ -6,14 +6,20 @@ import os
 import re
 from torch.utils.tensorboard.writer import SummaryWriter
 import csv
+import yaml
 
 from bpe import BPE
 from gqa_kv import GroupedQueryAttention
 from swi_glu import SwiGLU
 
-CHECKPOINT_DIR = "checkpoints"
-os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+def load_config(exp_name, path="config/config.yaml",):
+    with open(path, "r") as f:
+        cfg = yaml.safe_load(f)
+    
+    exp_cfg = cfg["experiments"][exp_name]
 
+    return exp_cfg
+    
 class TransformerBlock(nn.Module):
     def __init__(self, embed_size, heads, kv, dropout, device):
         super(TransformerBlock, self).__init__()
@@ -30,9 +36,14 @@ class TransformerBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.device = device
 
-    def forward(self, x, kv_cache=None):
-
-        attn_out, kv_cache_out = self.attention(self.norm1(x), kv_cache)
+    def forward(self, x, kv_cache=None, return_attn=False):
+        if return_attn:
+            attn_out, kv_cache_out, attn = self.attention(
+                self.norm1(x), kv_cache, return_attn=True
+            )
+        else:
+            attn_out, kv_cache_out = self.attention(self.norm1(x), kv_cache)
+            attn = None
 
         x = x + self.dropout(attn_out)
 
@@ -40,7 +51,7 @@ class TransformerBlock(nn.Module):
             self.feed_forward(self.norm2(x))
         )
 
-        return x, kv_cache_out
+        return x, kv_cache_out, attn
     
 class Decoder(nn.Module):
     def __init__(
@@ -73,19 +84,45 @@ class Decoder(nn.Module):
         self.fc_out.weight = self.word_embedding.weight
 
 
-    def forward(self, x, kv_cache=None):
+    # def forward(self, x, kv_cache=None):
+    #     x = self.dropout(self.word_embedding(x))
+    #     new_cache = []
+
+    #     for i, layer in enumerate(self.layers):
+    #         layer_cache = None if kv_cache is None else kv_cache[i]
+    #         x, layer_cache_out = layer(x, layer_cache)
+    #         new_cache.append(layer_cache_out)
+
+    #     ln = self.dropout(self.norm(x))
+    #     out = self.fc_out(ln)
+
+    #     return out, new_cache
+    def forward(self, x, kv_cache=None, return_attention=False):
         x = self.dropout(self.word_embedding(x))
         new_cache = []
+        attentions = []
 
         for i, layer in enumerate(self.layers):
             layer_cache = None if kv_cache is None else kv_cache[i]
-            x, layer_cache_out = layer(x, layer_cache)
+
+            x, layer_cache_out, attn = layer(
+                x,
+                layer_cache,
+                return_attn=return_attention
+            )
+
             new_cache.append(layer_cache_out)
+
+            if return_attention:
+                attentions.append(attn)
 
         ln = self.dropout(self.norm(x))
         out = self.fc_out(ln)
 
-        return out, new_cache
+        if return_attention:
+            return out, new_cache, attentions
+        else:
+            return out, new_cache
 
 
 class Llama(nn.Module):
@@ -115,11 +152,20 @@ class Llama(nn.Module):
 
         self.device = device
     
-    def forward(self, target, kv_cache=None):
+    # def forward(self, target, kv_cache=None):
 
-        out, new_cache = self.decoder(target, kv_cache)
+    #     out, new_cache = self.decoder(target, kv_cache)
 
-        return out, new_cache
+    #     return out, new_cache
+    def forward(self, target, kv_cache=None, return_attention=False):
+        if return_attention:
+            out, new_cache, attn = self.decoder(
+                target, kv_cache, return_attention=True
+            )
+            return out, new_cache, attn
+        else:
+            out, new_cache = self.decoder(target, kv_cache)
+            return out, new_cache
     
 class LlamaDataset(torch.utils.data.Dataset):
     def __init__(self, text, tokenizer, block_size):
@@ -127,7 +173,8 @@ class LlamaDataset(torch.utils.data.Dataset):
 
         tokens = tokenizer.encode(
             text,
-            allowed_special={"<s>", "</s>", "<unk>", "<|poem|>", "<|endpoem|>"}
+            # allowed_special={"<s>", "</s>", "<unk>", "<|poem|>", "<|endpoem|>"}   this was 35M model trained only on poems dataset
+            allowed_special={"<s>", "</s>", "<unk>", "<|book|>", "<|endbook|>"}
         )
 
         self.tokens = torch.tensor(tokens, dtype=torch.long)
@@ -143,6 +190,10 @@ class LlamaDataset(torch.utils.data.Dataset):
 
         return x, y
     
+
+'''
+Generate Responses
+'''
 @torch.no_grad()
 def generate(model, tokenizer, prompt, max_new_tokens=50, device="cuda"):
     model.eval()
@@ -164,6 +215,9 @@ def generate(model, tokenizer, prompt, max_new_tokens=50, device="cuda"):
     return tokenizer.decode(tokens[0].tolist())
 
 
+'''
+Utils
+'''
 def estimate_flops_per_token(model):
     return 6 * count_parameters(model)
 
@@ -235,13 +289,23 @@ def get_latest_checkpoint():
     return os.path.join(CHECKPOINT_DIR, latest_file)
 
 
+'''
+Main
+'''
 if __name__ == "__main__":
+    config = load_config("small_35M")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
     torch.set_float32_matmul_precision("high")
     torch.backends.cuda.matmul.allow_tf32 = True
 
-    LOG_DIR = "logs"
+    exp_name = config["name"]
+
+    CHECKPOINT_DIR = f"checkpoints/{exp_name}"
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+
+    LOG_DIR = f"logs/{exp_name}"
     os.makedirs(LOG_DIR, exist_ok=True)
     writer = SummaryWriter(LOG_DIR)
 
@@ -265,28 +329,29 @@ if __name__ == "__main__":
 
     model = Llama(
         vocab_size=vocab_size,
-        embed_size=512,
-        num_layers=12,
-        heads=8,
-        kv=4,
+        embed_size=config["model"]["embed_size"],
+        num_layers=config["model"]["num_layers"],
+        heads=config["model"]["heads"],
+        kv=config["model"]["kv"],
+        dropout=config["model"]["dropout"],
     ).to(device)
 
     dataset = LlamaDataset(
         text=text,
         tokenizer=tokenizer,
-        block_size=512
+        block_size=config["train"]["block_size"]
     )
 
     loader = DataLoader(
         dataset,
-        batch_size=128,
+        batch_size=config["train"]["batch_size"],
         shuffle=True,
         drop_last=True,
         num_workers=8,
         pin_memory=True
     )
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config["train"]["lr"])
     criterion = nn.CrossEntropyLoss()
 
     latest_ckpt = get_latest_checkpoint()
@@ -306,7 +371,7 @@ if __name__ == "__main__":
 
     flops_per_token = estimate_flops_per_token(model)
 
-    num_epochs = 5
+    num_epochs = config["train"]["num_epochs"]
     log_interval = 100
 
     model.train()
@@ -398,7 +463,7 @@ if __name__ == "__main__":
     print(f"Total parameters: {count_parameters(model):,}")
     print(f"Trainable parameters: {count_trainable_parameters(model):,}")
 
-    torch.save(model.state_dict(), "smol_poet.pt")
+    torch.save(model.state_dict(), config["pretrained_model"])
     print("Model saved.")
 
     print("Test Generation : ")

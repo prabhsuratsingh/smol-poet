@@ -27,7 +27,7 @@ class GroupedQueryAttention(nn.Module):
 
         self.device = device
 
-    def forward(self, seq, kv_cache=None):
+    def forward(self, seq, kv_cache=None, return_attn=False):
         N, seq_len, _ = seq.shape
         
         Wq = self.Lq(seq)
@@ -95,4 +95,8 @@ class GroupedQueryAttention(nn.Module):
         out = out.permute(0, 2, 1, 3).reshape(N, seq_len, self.embed_size)
 
         out = self.fc_out(out)
-        return out, new_cache
+
+        if return_attn:
+            return out, new_cache, attention
+        else:
+            return out, new_cache

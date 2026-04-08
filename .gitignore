@@ -14,3 +14,9 @@ poetry_corpus_new.txt
 from_amd_gpu/
 gutenberg_poetry/
 *.txt
+
+
+rl/
+rl_logs/
+rl_metrics_35M.csv
+models/
