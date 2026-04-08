@@ -182,21 +182,42 @@ class BPE:
                 self.bpe_ranks[pair] = rank
 
 
+def chunk_sample(file_path, target_chars=100_000_000, keep_prob=0.05):
+    result = []
+    total = 0
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if total >= target_chars:
+                break
+
+            if random.random() < keep_prob:
+                result.append(line)
+                total += len(line)
+
+    return "".join(result)
+
 
 if __name__ == "__main__":
-    with open("poetry_corpus.txt", "r", encoding="utf-8") as f:
-        lines = f.read()
+    # with open("poetry_corpus.txt", "r", encoding="utf-8") as f:
+    #     lines = f.readlines()
 
-    sample_size = 7_000_000
-    sampled_lines = random.sample(lines, min(sample_size, len(lines)))
+    # sample_size = 100_000_000 # 7M for poetry corpus
+    # sampled_lines = random.sample(lines, min(sample_size, len(lines)))
 
-    text = "".join(sampled_lines)
+    # text = "".join(sampled_lines)
+
+    text = chunk_sample(
+        "books_corpus_cleaned.txt",
+        target_chars=50_000_000,
+        keep_prob=0.1
+    )
 
     tokenizer = BPE()
     tokenizer.train(
         text,
-        vocab_size=1000,
-        allowed_special={"<s>", "</s>", "<unk>", "<|poem|>", "<|endpoem|>"}
+        vocab_size=16000, # 1k for poetry corpus
+        allowed_special={"<s>", "</s>", "<unk>", "<|book|>", "<|endbook|>"}
     )
 
     print("VOCAB Size : ")

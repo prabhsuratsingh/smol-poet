@@ -1,6 +1,7 @@
 experiments:
 
   small_35M:
+    name: small_35M
     pretrained_model: smol_poet_35M.pt
 
     model:
@@ -26,6 +27,7 @@ experiments:
       lr: 1e-6
 
   base_100M:
+    name: base_100M
     pretrained_model: smol_poet_100M.pt
 
     model:
@@ -43,6 +45,7 @@ experiments:
       lr: 1e-6
 
   large_200M:
+    name: large_200M
     pretrained_model: smol_poet_200M.pt
 
     model:
@@ -59,15 +62,15 @@ experiments:
     rl:
       lr: 5e-7
 
-shared:
-  train:
-    log_interval: 100
-    num_workers: 8
+# shared:
+#   train:
+#     log_interval: 100
+#     num_workers: 8
 
-  paths:
-    train_text: poetry_corpus.txt
-    vocab: vocab.json
-    merges: bpe_merges.txt
-    pretrained_model: smol_poet.pt
+#   paths:
+#     train_text: poetry_corpus.txt
+#     vocab: vocab.json
+#     merges: bpe_merges.txt
+#     pretrained_model: smol_poet.pt
 
-  device: cuda
+#   device: cuda
