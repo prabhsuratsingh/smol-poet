@@ -38,8 +38,8 @@ model_post_rl = Llama(
 ).to(DEVICE)
 
 
-model_base.load_state_dict(torch.load("from_amd_gpu/smol_poet.pt"))
-model_post_rl.load_state_dict(torch.load("smol_poet_rl_final.pt"))
+model_base.load_state_dict(torch.load("models/smol_35M/base/smol_poet.pt"))
+model_post_rl.load_state_dict(torch.load("models/smol_35M/ppo_fine_tune/smol_poet_rl_final.pt"))
 
 @torch.no_grad()
 def sample(model, prompt):

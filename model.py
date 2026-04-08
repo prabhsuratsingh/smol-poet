@@ -36,9 +36,14 @@ class TransformerBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.device = device
 
-    def forward(self, x, kv_cache=None):
-
-        attn_out, kv_cache_out = self.attention(self.norm1(x), kv_cache)
+    def forward(self, x, kv_cache=None, return_attn=False):
+        if return_attn:
+            attn_out, kv_cache_out, attn = self.attention(
+                self.norm1(x), kv_cache, return_attn=True
+            )
+        else:
+            attn_out, kv_cache_out = self.attention(self.norm1(x), kv_cache)
+            attn = None
 
         x = x + self.dropout(attn_out)
 
@@ -46,7 +51,7 @@ class TransformerBlock(nn.Module):
             self.feed_forward(self.norm2(x))
         )
 
-        return x, kv_cache_out
+        return x, kv_cache_out, attn
     
 class Decoder(nn.Module):
     def __init__(
@@ -79,19 +84,45 @@ class Decoder(nn.Module):
         self.fc_out.weight = self.word_embedding.weight
 
 
-    def forward(self, x, kv_cache=None):
+    # def forward(self, x, kv_cache=None):
+    #     x = self.dropout(self.word_embedding(x))
+    #     new_cache = []
+
+    #     for i, layer in enumerate(self.layers):
+    #         layer_cache = None if kv_cache is None else kv_cache[i]
+    #         x, layer_cache_out = layer(x, layer_cache)
+    #         new_cache.append(layer_cache_out)
+
+    #     ln = self.dropout(self.norm(x))
+    #     out = self.fc_out(ln)
+
+    #     return out, new_cache
+    def forward(self, x, kv_cache=None, return_attention=False):
         x = self.dropout(self.word_embedding(x))
         new_cache = []
+        attentions = []
 
         for i, layer in enumerate(self.layers):
             layer_cache = None if kv_cache is None else kv_cache[i]
-            x, layer_cache_out = layer(x, layer_cache)
+
+            x, layer_cache_out, attn = layer(
+                x,
+                layer_cache,
+                return_attn=return_attention
+            )
+
             new_cache.append(layer_cache_out)
+
+            if return_attention:
+                attentions.append(attn)
 
         ln = self.dropout(self.norm(x))
         out = self.fc_out(ln)
 
-        return out, new_cache
+        if return_attention:
+            return out, new_cache, attentions
+        else:
+            return out, new_cache
 
 
 class Llama(nn.Module):
@@ -121,11 +152,20 @@ class Llama(nn.Module):
 
         self.device = device
     
-    def forward(self, target, kv_cache=None):
+    # def forward(self, target, kv_cache=None):
 
-        out, new_cache = self.decoder(target, kv_cache)
+    #     out, new_cache = self.decoder(target, kv_cache)
 
-        return out, new_cache
+    #     return out, new_cache
+    def forward(self, target, kv_cache=None, return_attention=False):
+        if return_attention:
+            out, new_cache, attn = self.decoder(
+                target, kv_cache, return_attention=True
+            )
+            return out, new_cache, attn
+        else:
+            out, new_cache = self.decoder(target, kv_cache)
+            return out, new_cache
     
 class LlamaDataset(torch.utils.data.Dataset):
     def __init__(self, text, tokenizer, block_size):

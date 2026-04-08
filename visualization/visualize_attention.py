@@ -17,19 +17,27 @@ model = Llama(
     heads=8,
     kv=4,
 ).to(device)
-model.load_state_dict(torch.load("from_amd_gpu/smol_poet.pt"))
+model.load_state_dict(torch.load("models/smol_35M/base/smol_poet.pt"))
 
 text = "Shall I compare thee to a summer's day"
 tokens = tokenizer.encode(text)
 
 x = torch.tensor(tokens).unsqueeze(0).to(device)
 
-logits, cache, attention = model(x)
+with torch.no_grad():
+    logits, cache, attention = model(x, return_attention=True)
 
-attn = attention[0][0].cpu().numpy()
+attn = attention[10][0].mean(0).cpu().numpy()
+
+tokens_str = [tokenizer.decode([t]) for t in tokens]
 
 plt.figure(figsize=(8,6))
-sns.heatmap(attn, cmap="viridis")
+sns.heatmap(
+    attn,
+    xticklabels=tokens_str,
+    yticklabels=tokens_str,
+    cmap="viridis"
+)
 
 plt.title("Attention Head Visualization")
 plt.xlabel("Key Tokens")
