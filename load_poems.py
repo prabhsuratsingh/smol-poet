@@ -12,7 +12,7 @@ OUT_DIR = Path("E:/gutenberg_books")
 RDF_ARCHIVE = OUT_DIR / "rdf-files.tar.bz2"
 RDF_DIR = OUT_DIR / "cache" / "epub"
 RAW_DIR = OUT_DIR / "raw_books"
-CORPUS_FILE = OUT_DIR / "books_corpus_cleaned.txt"
+CORPUS_FILE = OUT_DIR / "books_corpus_cleaned_final_2.txt"
 
 RDF_URL = "https://www.gutenberg.org/cache/epub/feeds/rdf-files.tar.bz2"
 
@@ -199,19 +199,37 @@ def remove_frontmatter(text):
 
     return text
 
+# def clean_text_keep_format(text):
+
+#     # Keep letters, spaces, newline, apostrophes, and periods
+#     text = re.sub(r"[^A-Za-z\s\n\.\']", '', text)
+
+#     # Normalize multiple spaces (but keep line structure)
+#     text = re.sub(r'[ ]{2,}', ' ', text)
+
+#     # Optional: remove spaces before periods (cleanup)
+#     text = re.sub(r' \.', '.', text)
+
+#     return text
+
+# def clean_text_keep_format(text):
+#     # Keep ONLY letters, spaces, and newlines
+#     text = re.sub(r"[^A-Za-z\s\n]", "", text)
+
+#     # Remove underscores explicitly (just in case)
+#     text = text.replace("_", "")
+
+#     # Normalize multiple spaces (preserve newlines)
+#     text = re.sub(r"[ ]{2,}", " ", text)
+
+#     return text
+
 import re
 
 def clean_text_keep_format(text):
-
-    # Keep letters, spaces, newline, apostrophes, and periods
-    text = re.sub(r"[^A-Za-z\s\n\.\']", '', text)
-
-    # Normalize multiple spaces (but keep line structure)
-    text = re.sub(r'[ ]{2,}', ' ', text)
-
-    # Optional: remove spaces before periods (cleanup)
-    text = re.sub(r' \.', '.', text)
-
+    text = text.lower()
+    text = re.sub(r"[^a-z\s\n]", "", text)
+    text = re.sub(r"[ ]{2,}", " ", text)
     return text
 
 def build_corpus():
