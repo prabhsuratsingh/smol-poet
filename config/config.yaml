@@ -17,60 +17,62 @@ experiments:
       num_epochs: 5
       block_size: 512
 
-    rl:
-      steps: 3000
-      temperature: 0.9
-      max_new_tokens: 64
-      k: 8
-      beta_kl: 0.005
-      clip_eps: 0.2
-      lr: 1e-6
-
   base_100M:
     name: base_100M
     pretrained_model: smol_poet_100M.pt
 
     model:
-      embed_size: 512
+      embed_size: 640
       num_layers: 12
-      heads: 8
+      heads: 10
+      kv: 5
+      dropout: 0.0
+      
+    train:
+      batch_size: 128
+      lr: 3e-4
+      num_epochs: 5
+      block_size: 512
+
+  medium_150M:
+    name: medium_150M
+    pretrained_model: smol_poet_150M.pt
+
+    model:
+      embed_size: 768
+      num_layers: 14
+      heads: 12
       kv: 4
       dropout: 0.0
 
     train:
-      batch_size: 128
-      lr: 3e-4
-
-    rl:
-      lr: 1e-6
+      batch_size: 96  
+      lr: 2.5e-4
+      num_epochs: 5
+      block_size: 512
 
   large_200M:
     name: large_200M
     pretrained_model: smol_poet_200M.pt
 
     model:
-      embed_size: 768
+      embed_size: 896
       num_layers: 16
-      heads: 12
-      kv: 6
+      heads: 14
+      kv: 7
       dropout: 0.0
 
     train:
-      batch_size: 64
+      batch_size: 64  
       lr: 2e-4
+      num_epochs: 5
+      block_size: 512
 
-    rl:
-      lr: 5e-7
-
-# shared:
-#   train:
-#     log_interval: 100
-#     num_workers: 8
-
-#   paths:
-#     train_text: poetry_corpus.txt
-#     vocab: vocab.json
-#     merges: bpe_merges.txt
-#     pretrained_model: smol_poet.pt
-
-#   device: cuda
+ppo:
+  steps: 3000
+  temperature: 0.9
+  max_new_tokens: 64
+  k: 8
+  beta_kl: 0.005
+  clip_eps: 0.2
+  lr: 1e-6

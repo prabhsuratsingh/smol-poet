@@ -8,7 +8,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 import csv
 import yaml
 
-from bpe import BPE
+from bpe import HeapBPE
 from gqa_kv import GroupedQueryAttention
 from swi_glu import SwiGLU
 
@@ -174,7 +174,7 @@ class LlamaDataset(torch.utils.data.Dataset):
         tokens = tokenizer.encode(
             text,
             # allowed_special={"<s>", "</s>", "<unk>", "<|poem|>", "<|endpoem|>"}   this was 35M model trained only on poems dataset
-            allowed_special={"<s>", "</s>", "<unk>", "<|book|>", "<|endbook|>"}
+            # allowed_special={"<s>", "</s>", "<unk>", "<|book|>", "<|endbook|>"}
         )
 
         self.tokens = torch.tensor(tokens, dtype=torch.long)
@@ -190,6 +190,21 @@ class LlamaDataset(torch.utils.data.Dataset):
 
         return x, y
     
+class TokenDataset(torch.utils.data.Dataset):
+    def __init__(self, token_path, block_size):
+        self.tokens = torch.load(token_path, mmap=True)
+        self.block_size = block_size
+
+    def __len__(self):
+        return (len(self.tokens) - 1) // self.block_size
+
+    def __getitem__(self, idx):
+        start = idx * self.block_size
+
+        x = self.tokens[start:start+self.block_size].long()
+        y = self.tokens[start+1:start+self.block_size+1].long()
+
+        return x, y
 
 '''
 Generate Responses
@@ -236,12 +251,13 @@ def count_trainable_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def save_checkpoint(model, optimizer, epoch, global_step, keep_last_n=3):
+def save_checkpoint(model, optimizer, epoch, global_step, tokens_seen, keep_last_n=3):
     checkpoint = {
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "epoch": epoch,
         "global_step": global_step,
+        "tokens_seen": tokens_seen
     }
 
     filename = f"checkpoint_step_{global_step}.pt"
@@ -293,7 +309,7 @@ def get_latest_checkpoint():
 Main
 '''
 if __name__ == "__main__":
-    config = load_config("small_35M")
+    config = load_config("base_100M")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
@@ -309,7 +325,7 @@ if __name__ == "__main__":
     os.makedirs(LOG_DIR, exist_ok=True)
     writer = SummaryWriter(LOG_DIR)
 
-    csv_file = open("training_metrics.csv", "w", newline="")
+    csv_file = open(f"training_metrics_{exp_name}.csv", "w", newline="")
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow([
         "step",
@@ -319,11 +335,11 @@ if __name__ == "__main__":
         "tflops"
     ])
     
-    with open("poetry_corpus.txt", "r", encoding="utf-8") as f:
-        text = f.read()
+    # with open("E:/gutenberg_books/books_corpus_cleaned_final_2.txt", "r", encoding="utf-8") as f:
+    #     text = f.read()
 
-    tokenizer = BPE()
-    tokenizer.load_tokenizer(vocab_path="vocab.json", merges_path="bpe_merges.txt")
+    tokenizer = HeapBPE()
+    tokenizer.load_tokenizer(vocab_path="triple_experiments/vocab.json", merges_path="triple_experiments/bpe_merges.txt")
 
     vocab_size = len(tokenizer.vocab)
 
@@ -336,9 +352,14 @@ if __name__ == "__main__":
         dropout=config["model"]["dropout"],
     ).to(device)
 
-    dataset = LlamaDataset(
-        text=text,
-        tokenizer=tokenizer,
+    # dataset = LlamaDataset(
+    #     text=text,
+    #     tokenizer=tokenizer,
+    #     block_size=config["train"]["block_size"]
+    # )
+
+    dataset = TokenDataset(
+        token_path="triple_experiments/tokens/tokens.pt",
         block_size=config["train"]["block_size"]
     )
 
@@ -351,13 +372,17 @@ if __name__ == "__main__":
         pin_memory=True
     )
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config["train"]["lr"])
+    initial_lr = config["train"]["lr"]
+    min_lr = initial_lr * 0.1
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr)
     criterion = nn.CrossEntropyLoss()
 
     latest_ckpt = get_latest_checkpoint()
 
     global_step = 0
     start_epoch = 0
+    tokens_seen = 0
 
     if latest_ckpt is not None:
         print(f"Resuming from {latest_ckpt}")
@@ -368,20 +393,23 @@ if __name__ == "__main__":
 
         global_step = checkpoint["global_step"]
         start_epoch = checkpoint["epoch"] + 1
+        tokens_seen = checkpoint.get("tokens_seen", 0)
 
     flops_per_token = estimate_flops_per_token(model)
 
     num_epochs = config["train"]["num_epochs"]
     log_interval = 100
 
-    model.train()
+    target_tokens = 2_000_000_000
 
-    for epoch in range(start_epoch, num_epochs):
+    model.train()
+    epoch = start_epoch
+    last_log_time = time.time()
+
+    while tokens_seen < target_tokens:
         epoch_loss = 0.0
         num_batches = 0
         running_loss = 0.0
-
-        t0 = time.time()
 
         for step, (x, y) in enumerate(loader):
             global_step += 1
@@ -393,7 +421,7 @@ if __name__ == "__main__":
 
             optimizer.zero_grad(set_to_none=True)
 
-            with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+            with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
                 logits, _ = model(x)
                 loss = criterion(
                     logits.reshape(-1, logits.size(-1)),
@@ -401,24 +429,23 @@ if __name__ == "__main__":
                 )
 
             loss.backward()
-            total_norm = 0
-            for p in model.parameters():
-                if p.grad is not None:
-                    param_norm = p.grad.data.norm(2)
-                    total_norm += param_norm.item() ** 2
-            total_norm = total_norm ** 0.5
-
-            writer.add_scalar("train/grad_norm", total_norm, global_step)
-
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            if global_step % 50000 == 0 and global_step > 0:
-                save_checkpoint(model, optimizer, epoch, global_step, keep_last_n=3)
+            # count tokens
+            batch_tokens = x.numel()
+            tokens_seen += batch_tokens
 
+            progress = tokens_seen / target_tokens
+            lr = min_lr + 0.5 * (initial_lr - min_lr) * (1 + torch.cos(torch.tensor(progress * 3.14159)))
+
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = lr.item()
+
+            # ---- metrics ----
             step_time = time.time() - step_start
 
-            tokens = x.numel()
-            flops = flops_per_token * tokens
+            flops = flops_per_token * batch_tokens
             tflops = flops / step_time / 1e12
 
             loss_val = loss.item()
@@ -426,39 +453,45 @@ if __name__ == "__main__":
             epoch_loss += loss_val
             num_batches += 1
 
+            # ---- logging ----
             if global_step % log_interval == 0:
                 avg_loss = running_loss / log_interval
-                tok_per_sec = tokens / step_time
+                # tok_per_sec = batch_tokens / step_time
+                tok_per_sec = (batch_tokens * log_interval) / (time.time() - last_log_time)
 
                 print(
                     f"step {global_step:6d} | "
                     f"epoch {epoch+1} | "
                     f"loss {avg_loss:.4f} | "
                     f"{tok_per_sec:8.0f} tok/s | "
-                    f"{tflops:.2f} TFLOPs"
+                    f"{tflops:.2f} TFLOPs | "
+                    f"tokens {tokens_seen/1e9:.2f}B"
                 )
 
-                writer.add_scalar("train/loss", avg_loss, global_step)
-                writer.add_scalar("train/tokens_per_sec", tok_per_sec, global_step)
-                writer.add_scalar("train/tflops", tflops, global_step)
+                last_log_time = time.time()
 
-                csv_writer.writerow([
-                    global_step,
-                    epoch+1,
-                    avg_loss,
-                    tok_per_sec,
-                    tflops
-                ])
+                writer.add_scalar("train/loss", avg_loss, global_step)
+                writer.add_scalar("train/tokens_seen", tokens_seen, global_step)
 
                 running_loss = 0.0
 
+            # ---- checkpoint ----
+            if global_step % 50000 == 0 and global_step > 0:
+                save_checkpoint(model, optimizer, epoch, global_step, tokens_seen, keep_last_n=3)
+
+            # ---- generation ----
             if global_step % 10000 == 0:
                 sample = generate(model, tokenizer, "O gentle night")
                 writer.add_text("generation/sample", sample, global_step)
 
-        avg_epoch_loss = epoch_loss / num_batches
-        print(f"epoch {epoch+1}/{num_epochs} | avg loss {avg_epoch_loss:.4f}")
+            # STOP CONDITION
+            if tokens_seen >= target_tokens:
+                break
 
+        avg_epoch_loss = epoch_loss / max(1, num_batches)
+        print(f"epoch {epoch+1} | avg loss {avg_epoch_loss:.4f}")
+
+        epoch += 1
 
     print(f"Total parameters: {count_parameters(model):,}")
     print(f"Trainable parameters: {count_trainable_parameters(model):,}")
