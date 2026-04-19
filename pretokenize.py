@@ -1,19 +1,23 @@
 import torch
-from bpe import HeapBPE
 from tqdm import tqdm
 import os
+from transformers import AutoTokenizer
 
 INPUT_FILE = "E:/gutenberg_books/books_corpus_cleaned_final_2.txt"
 OUTPUT_FILE = "E:/triple_experiments/tokens.pt"
 TEMP_FILE = "E:/triple_experiments/tokens.tmp"
 
-CHUNK_SIZE = 5_000_000
+CHUNK_SIZE = 500_000
 
-tokenizer = HeapBPE()
-tokenizer.load_tokenizer(
-    vocab_path="triple_experiments/vocab.json",
-    merges_path="triple_experiments/bpe_merges.txt"
-)
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
+special_tokens = {
+    "additional_special_tokens": [
+        "<|book|>",
+        "<|endbook|>"
+    ]
+}
+tokenizer.add_special_tokens(special_tokens)
+tokenizer.pad_token = tokenizer.eos_token
 
 file_size = os.path.getsize(INPUT_FILE)
 
@@ -22,17 +26,21 @@ with open(INPUT_FILE, "r", encoding="utf-8") as f, \
 
     with tqdm(total=file_size, unit="B", unit_scale=True, desc="Processing") as pbar:
         while True:
+            print("Reading chunk...")
             chunk = f.read(CHUNK_SIZE)
+            print("Read done, size:", len(chunk))
             if not chunk:
                 break
 
-            tokens = tokenizer.encode(chunk)
+            print("Tokenizing...")
+            tokens = tokenizer.encode(chunk, add_special_tokens=False)
+            print("Tokenized:", len(tokens))
+            pbar.update(len(chunk))
 
             # write tokens directly (no RAM accumulation)
             tensor = torch.tensor(tokens, dtype=torch.int32)
             tensor.numpy().tofile(out)
 
-            pbar.update(len(chunk))
 
 # ---- convert raw binary → torch tensor ----
 print("Finalizing tensor...")

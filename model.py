@@ -7,8 +7,9 @@ import re
 from torch.utils.tensorboard.writer import SummaryWriter
 import csv
 import yaml
+from transformers import AutoTokenizer
 
-from bpe import HeapBPE
+# from bpe import HeapBPE
 from gqa_kv import GroupedQueryAttention
 from swi_glu import SwiGLU
 
@@ -334,14 +335,19 @@ if __name__ == "__main__":
         "tokens_per_sec",
         "tflops"
     ])
-    
-    # with open("E:/gutenberg_books/books_corpus_cleaned_final_2.txt", "r", encoding="utf-8") as f:
-    #     text = f.read()
 
-    tokenizer = HeapBPE()
-    tokenizer.load_tokenizer(vocab_path="triple_experiments/vocab.json", merges_path="triple_experiments/bpe_merges.txt")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    special_tokens = {
+        "additional_special_tokens": [
+            "<|book|>",
+            "<|endbook|>"
+        ]
+    }
+    tokenizer.add_special_tokens(special_tokens)
+    tokenizer.pad_token = tokenizer.eos_token
 
-    vocab_size = len(tokenizer.vocab)
+    # vocab_size = tokenizer.vocab_size
+    vocab_size = len(tokenizer)
 
     model = Llama(
         vocab_size=vocab_size,
@@ -351,12 +357,6 @@ if __name__ == "__main__":
         kv=config["model"]["kv"],
         dropout=config["model"]["dropout"],
     ).to(device)
-
-    # dataset = LlamaDataset(
-    #     text=text,
-    #     tokenizer=tokenizer,
-    #     block_size=config["train"]["block_size"]
-    # )
 
     dataset = TokenDataset(
         token_path="triple_experiments/tokens/tokens.pt",
