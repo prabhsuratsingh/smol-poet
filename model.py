@@ -223,7 +223,11 @@ def generate(model, tokenizer, prompt, max_new_tokens=50, device="cuda"):
     logits, kv_cache = model(tokens, kv_cache)
 
     for _ in range(max_new_tokens):
-        next_token = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)
+        # next_token = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)
+        logits_step = logits[:, -1, :] / 0.8  # temperature
+
+        probs = torch.softmax(logits_step, dim=-1)
+        next_token = torch.multinomial(probs, num_samples=1)
 
         logits, kv_cache = model(next_token, kv_cache)
         tokens = torch.cat([tokens, next_token], dim=1)
