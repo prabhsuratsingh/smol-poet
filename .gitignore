@@ -22,3 +22,7 @@ rl_metrics_35M.csv
 models/
 upload_to_hf.py
 triple_experiments/
+
+logs_100M/
+Introduction.md
+smol_poet_100M.pt
