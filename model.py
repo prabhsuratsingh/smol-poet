@@ -314,7 +314,7 @@ def get_latest_checkpoint():
 Main
 '''
 if __name__ == "__main__":
-    config = load_config("base_100M")
+    config = load_config("medium_150M")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}")
