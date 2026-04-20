@@ -405,7 +405,7 @@ if __name__ == "__main__":
     log_interval = 100
 
     target_tokens = 2_000_000_000
-    warmup_tokens = 50_000_000 # 80 for 150, 100 for 200
+    warmup_tokens = 80_000_000 # 80 for 150, 100 for 200
 
     model.train()
     epoch = start_epoch
