@@ -1,7 +1,7 @@
 import torch
+from transformers import AutoTokenizer
 
 from model import Llama
-from bpe import BPE
 
 DEVICE = "cuda"
 
@@ -18,11 +18,21 @@ RL_STEPS = 3000
 
 torch.manual_seed(0)
 
-tokenizer = BPE()
-tokenizer.load_tokenizer("from_amd_gpu/vocab.json", "from_amd_gpu/bpe_merges.txt")
+
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+special_tokens = {
+    "additional_special_tokens": [
+        "<|book|>",
+        "<|endbook|>"
+    ]
+}
+
+tokenizer.add_special_tokens(special_tokens)
+tokenizer.pad_token = tokenizer.eos_token
 
 model_base = Llama(
-    vocab_size=len(tokenizer.vocab),
+    vocab_size=len(tokenizer),
     embed_size=512,
     num_layers=12,
     heads=8,
@@ -30,7 +40,7 @@ model_base = Llama(
 ).to(DEVICE)
 
 model_post_rl = Llama(
-    vocab_size=len(tokenizer.vocab),
+    vocab_size=len(tokenizer),
     embed_size=512,
     num_layers=12,
     heads=8,
