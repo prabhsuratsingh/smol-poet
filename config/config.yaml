@@ -30,7 +30,7 @@ experiments:
       
     train:
       batch_size: 128
-      lr: 3e-4
+      lr: 1e-4
       num_epochs: 5
       block_size: 512
 

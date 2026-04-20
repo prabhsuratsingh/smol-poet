@@ -401,6 +401,7 @@ if __name__ == "__main__":
     log_interval = 100
 
     target_tokens = 2_000_000_000
+    warmup_tokens = 50_000_000 # 80 for 150, 100 for 200
 
     model.train()
     epoch = start_epoch
@@ -421,7 +422,7 @@ if __name__ == "__main__":
 
             optimizer.zero_grad(set_to_none=True)
 
-            with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
+            with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
                 logits, _ = model(x)
                 loss = criterion(
                     logits.reshape(-1, logits.size(-1)),
@@ -436,11 +437,22 @@ if __name__ == "__main__":
             batch_tokens = x.numel()
             tokens_seen += batch_tokens
 
-            progress = tokens_seen / target_tokens
-            lr = min_lr + 0.5 * (initial_lr - min_lr) * (1 + torch.cos(torch.tensor(progress * 3.14159)))
+            # progress = tokens_seen / target_tokens
+            # lr = min_lr + 0.5 * (initial_lr - min_lr) * (1 + torch.cos(torch.tensor(progress * 3.14159)))
+
+            # for param_group in optimizer.param_groups:
+            #     param_group["lr"] = lr.item()
+            import math
+            if tokens_seen < warmup_tokens:
+                # 🔥 linear warmup
+                lr = initial_lr * (tokens_seen / warmup_tokens)
+            else:
+                # cosine decay after warmup
+                progress = (tokens_seen - warmup_tokens) / (target_tokens - warmup_tokens)
+                lr = min_lr + 0.5 * (initial_lr - min_lr) * (1 + math.cos(progress * math.pi))
 
             for param_group in optimizer.param_groups:
-                param_group["lr"] = lr.item()
+                param_group["lr"] = lr
 
             # ---- metrics ----
             step_time = time.time() - step_start
