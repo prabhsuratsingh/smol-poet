@@ -359,7 +359,7 @@ if __name__ == "__main__":
     ).to(device)
 
     dataset = TokenDataset(
-        token_path="triple_experiments/tokens/tokens.pt",
+        token_path="tokens.pt",
         block_size=config["train"]["block_size"]
     )
 
@@ -372,8 +372,8 @@ if __name__ == "__main__":
         pin_memory=True
     )
 
-    initial_lr = config["train"]["lr"]
-    min_lr = initial_lr * 0.1
+    initial_lr = float(config["train"]["lr"])
+    min_lr = float(initial_lr) * 0.1
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr)
     criterion = nn.CrossEntropyLoss()

@@ -2,6 +2,7 @@ import torch
 from tqdm import tqdm
 import os
 from transformers import AutoTokenizer
+import numpy as np
 
 INPUT_FILE = "E:/gutenberg_books/books_corpus_cleaned_final_2.txt"
 OUTPUT_FILE = "E:/triple_experiments/tokens.pt"
@@ -33,19 +34,22 @@ with open(INPUT_FILE, "r", encoding="utf-8") as f, \
                 break
 
             print("Tokenizing...")
-            tokens = tokenizer.encode(chunk, add_special_tokens=False)
+            # tokens = tokenizer.encode(chunk, add_special_tokens=False)
+            tokens = tokenizer(chunk, add_special_tokens=False)["input_ids"]
             print("Tokenized:", len(tokens))
             pbar.update(len(chunk))
 
             # write tokens directly (no RAM accumulation)
-            tensor = torch.tensor(tokens, dtype=torch.int32)
-            tensor.numpy().tofile(out)
+            # tensor = torch.tensor(tokens, dtype=torch.int32)
+            # tensor.numpy().tofile(out)
+            np.array(tokens, dtype=np.int32).tofile(out)
 
 
 # ---- convert raw binary → torch tensor ----
 print("Finalizing tensor...")
 
-tokens = torch.fromfile(TEMP_FILE, dtype=torch.int32)
+tokens = np.fromfile(TEMP_FILE, dtype=np.int32)
+tokens = torch.from_numpy(tokens)
 torch.save(tokens, OUTPUT_FILE)
 
 os.remove(TEMP_FILE)
