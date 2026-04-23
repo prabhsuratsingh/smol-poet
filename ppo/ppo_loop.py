@@ -59,10 +59,10 @@ TEMPERATURE = 0.7
 MAX_NEW_TOKENS = 64
 K = 8
 # BETA_KL = 0.02
-BETA_KL = 0.05
+BETA_KL = 0.08
 CLIP_EPS = 0.2
 # LR = 1e-6
-LR = 5e-7
+LR = 2e-7
 RL_STEPS = 3000
 steps = 3000
 
@@ -190,6 +190,7 @@ def ppo_step(model, ref_model, optimizer, tokenizer, prompts, beta=0.02, device=
 
     # ---- 5. PPO ratio ----
     ratio = torch.exp(logprobs - logprobs_old)
+    ratio = torch.clamp(ratio, 0, 5.0)
 
     # expand rewards to token level
     adv = rewards.unsqueeze(1).expand_as(logprobs)
@@ -252,6 +253,7 @@ def run_ppo(
             optimizer,
             tokenizer,
             batch_prompts,
+            beta=BETA_KL,
             device=device
         )
 

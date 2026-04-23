@@ -112,8 +112,8 @@ def word_validity_score(text):
 
 def compute_reward(text):
     return (
-        1.5 * line_structure_score(text) +
-        1.5 * repetition_penalty(text) +
+        1.2 * line_structure_score(text) +
+        2.0 * repetition_penalty(text) +
         0.5 * length_score(text) +
         0.8 * rhyme_score(text) +
         0.3 * entropy_bonus(text) +
