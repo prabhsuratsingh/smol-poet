@@ -21,7 +21,7 @@ def load_config(exp_name, path="config/config.yaml",):
     return exp_cfg
 
 PRETRAINED_PATH = "smol_poet_100M.pt"
-
+FILE_SAVE_PATH = "smol_poet_100M"
 
 def save_checkpoint(step, policy, optimizer, path):
     checkpoint = {
@@ -33,12 +33,12 @@ def save_checkpoint(step, policy, optimizer, path):
     }
     torch.save(checkpoint, path)
 
-LOG_DIR = f"ppo_logs/{PRETRAINED_PATH}"
+LOG_DIR = f"ppo_logs/{FILE_SAVE_PATH}"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 writer = SummaryWriter(LOG_DIR)
 
-csv_file = open(f"rl_metrics_{PRETRAINED_PATH}.csv", "w", newline="")
+csv_file = open(f"rl_metrics_{FILE_SAVE_PATH}.csv", "w", newline="")
 csv_writer = csv.writer(csv_file)
 csv_writer.writerow([
     "step",
@@ -303,7 +303,7 @@ def run_ppo(
                 step,
                 model,
                 optimizer,
-                f"ppo_ckpt_step_{step}.pt"
+                f"ppo_{FILE_SAVE_PATH}_ckpt_step_{step}.pt"
             )
 
     writer.close()
