@@ -20,8 +20,8 @@ def load_config(exp_name, path="config/config.yaml",):
 
     return exp_cfg
 
-PRETRAINED_PATH = "smol_poet_100M.pt"
-FILE_SAVE_PATH = "smol_poet_100M"
+PRETRAINED_PATH = "smol_poet_150M.pt"
+FILE_SAVE_PATH = "smol_poet_150M"
 
 def save_checkpoint(step, policy, optimizer, path):
     checkpoint = {
@@ -306,12 +306,19 @@ def run_ppo(
                 f"ppo_{FILE_SAVE_PATH}_ckpt_step_{step}.pt"
             )
 
+    # ---- FINAL SAVE ----
+    final_path = f"ppo_{FILE_SAVE_PATH}_final.pt"
+
+    torch.save(model.state_dict(), final_path)
+
+    print(f"\nFinal model saved to {final_path}\n")
+
     writer.close()
     csv_file.close()
 
 
 if __name__ == "__main__":
-    config = load_config("base_100M")
+    config = load_config("medium_150M")
     exp_name = config["name"]
     PRETRAINED_PATH = config["pretrained_model"]
 
