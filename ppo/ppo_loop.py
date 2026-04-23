@@ -55,7 +55,7 @@ DEVICE = "cuda"
 DTYPE = torch.bfloat16
 
 
-TEMPERATURE = 0.9
+TEMPERATURE = 0.7
 MAX_NEW_TOKENS = 64
 K = 8
 # BETA_KL = 0.02
