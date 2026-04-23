@@ -303,7 +303,7 @@ def run_ppo(
                 step,
                 model,
                 optimizer,
-                f"ppo_{PRETRAINED_PATH}_ckpt_step_{step}.pt"
+                f"ppo_ckpt_step_{step}.pt"
             )
 
     writer.close()
