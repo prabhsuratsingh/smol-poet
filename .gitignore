@@ -24,5 +24,14 @@ upload_to_hf.py
 triple_experiments/
 
 logs_100M/
+logs_150M/
+logs_200M/
 Introduction.md
 smol_poet_100M.pt
+smol_poet_150M.pt
+smol_poet_200M.pt
+
+ppo_from_amd/
+ppo_logs_100M_no_final/
+ppo_logs_150M/
+ppo_logs_200M/

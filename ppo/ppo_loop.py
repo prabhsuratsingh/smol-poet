@@ -20,8 +20,8 @@ def load_config(exp_name, path="config/config.yaml",):
 
     return exp_cfg
 
-PRETRAINED_PATH = "smol_poet_150M.pt"
-FILE_SAVE_PATH = "smol_poet_150M"
+PRETRAINED_PATH = "smol_poet_200M.pt"
+FILE_SAVE_PATH = "smol_poet_200M"
 
 def save_checkpoint(step, policy, optimizer, path):
     checkpoint = {
@@ -234,16 +234,49 @@ def run_ppo(
     steps=1000,
     batch_size=8,
     lr=1e-5,
-    device="cuda"
+    device="cuda",
+    resume_path=None,
+    ref_model=None
 ):
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    start_step = 0
 
-    ref_model = copy.deepcopy(model).eval()
+    if resume_path is not None and os.path.exists(resume_path):
+        print(f"Resuming from {resume_path}")
+
+        checkpoint = torch.load(resume_path, map_location=device)
+
+        model.load_state_dict(checkpoint["model_state"])
+        optimizer.load_state_dict(checkpoint["optimizer_state"])
+
+        start_step = checkpoint["step"] + 1
+
+        # restore RNG (important for reproducibility)
+        # ---- restore CPU RNG ----
+        rng_state = checkpoint["rng_state"]
+        rng_state = torch.tensor(rng_state, dtype=torch.uint8, device="cpu")
+        torch.set_rng_state(rng_state)
+
+
+        # ---- restore CUDA RNG ----
+        cuda_rng_state = checkpoint["cuda_rng_state"]
+
+        fixed_cuda_states = [
+            torch.tensor(s, dtype=torch.uint8, device="cpu")
+            for s in cuda_rng_state
+        ]
+
+        torch.cuda.set_rng_state_all(fixed_cuda_states)
+
+    print(f"Resumed at step {start_step}")
+
+    # ref_model = copy.deepcopy(model).eval()
     for p in ref_model.parameters():
         p.requires_grad = False
 
-    for step in range(steps):
+    # for step in range(steps):
+    for step in range(start_step, steps):
 
         batch_prompts = random.choices(prompts, k=batch_size)
 
@@ -284,7 +317,7 @@ def run_ppo(
             sample_tokens, _, _ = sample(
                 model,
                 tokenizer,
-                "O gentle night",
+                "In the silent forest",
                 device=device
             )
 
@@ -318,7 +351,7 @@ def run_ppo(
 
 
 if __name__ == "__main__":
-    config = load_config("medium_150M")
+    config = load_config("large_200M")
     exp_name = config["name"]
     PRETRAINED_PATH = config["pretrained_model"]
 
@@ -337,7 +370,17 @@ if __name__ == "__main__":
     vocab_size = len(tokenizer)
 
 
-    policy = Llama(
+    # policy = Llama(
+    #     vocab_size=vocab_size,
+    #     embed_size=config["model"]["embed_size"],
+    #     num_layers=config["model"]["num_layers"],
+    #     heads=config["model"]["heads"],
+    #     kv=config["model"]["kv"],
+    #     dropout=config["model"]["dropout"],
+    # ).to(DEVICE)
+    # policy.load_state_dict(torch.load(PRETRAINED_PATH, map_location=DEVICE))
+    # ---- base model (frozen reference) ----
+    base_model = Llama(
         vocab_size=vocab_size,
         embed_size=config["model"]["embed_size"],
         num_layers=config["model"]["num_layers"],
@@ -345,16 +388,28 @@ if __name__ == "__main__":
         kv=config["model"]["kv"],
         dropout=config["model"]["dropout"],
     ).to(DEVICE)
-    policy.load_state_dict(torch.load(PRETRAINED_PATH, map_location=DEVICE))
+
+    base_model.load_state_dict(torch.load(PRETRAINED_PATH, map_location=DEVICE))
+    base_model = base_model.to(dtype=DTYPE)
+    base_model.eval()
+
+    for p in base_model.parameters():
+        p.requires_grad = False
+
+
+    # ---- policy model (trainable) ----
+    policy = copy.deepcopy(base_model)
+    
+    
     policy = policy.to(dtype=DTYPE)
 
 
-    ref_model = copy.deepcopy(policy).eval()
-    reward_model = copy.deepcopy(policy).eval()
+    # ref_model = copy.deepcopy(policy).eval()
+    # reward_model = copy.deepcopy(policy).eval()
 
-    for m in (ref_model, reward_model):
-        for p in m.parameters():
-            p.requires_grad = False
+    # for m in (ref_model, reward_model):
+    #     for p in m.parameters():
+    #         p.requires_grad = False
 
     prompts = [
         "O gentle night",
@@ -371,5 +426,7 @@ if __name__ == "__main__":
         steps=RL_STEPS,
         batch_size=K,
         lr=LR,
-        device=DEVICE
+        device=DEVICE,
+        resume_path="ppo_smol_poet_200M_ckpt_step_2500.pt",
+        ref_model=base_model
     )
