@@ -255,7 +255,7 @@ def run_ppo(
         # restore RNG (important for reproducibility)
         # ---- restore CPU RNG ----
         rng_state = checkpoint["rng_state"]
-        rng_state = rng_state.clone().detach().to(torch.uint8)
+        rng_state = torch.tensor(rng_state, dtype=torch.uint8, device="cpu")
         torch.set_rng_state(rng_state)
 
 
@@ -263,8 +263,7 @@ def run_ppo(
         cuda_rng_state = checkpoint["cuda_rng_state"]
 
         fixed_cuda_states = [
-            # torch.tensor(s, dtype=torch.uint8, device="cpu")
-            s.clone().detach().to(torch.uint8)
+            torch.tensor(s, dtype=torch.uint8, device="cpu")
             for s in cuda_rng_state
         ]
 
