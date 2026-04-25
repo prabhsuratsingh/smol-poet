@@ -52,7 +52,7 @@ torch.backends.cuda.matmul.allow_tf32 = True
 
 DEVICE = "cuda"
 # DTYPE = torch.float32
-DTYPE = torch.bfloat16
+DTYPE = torch.float32
 
 
 TEMPERATURE = 0.7
@@ -171,7 +171,7 @@ def ppo_step(model, ref_model, optimizer, tokenizer, prompts, beta=0.02, device=
     masks = []
     for i, pl in enumerate(prompt_lens):
         mask = torch.zeros_like(selected[i])
-        mask[pl:] = 1.0
+        mask[pl-1:] = 1.0
         masks.append(mask)
 
     masks = torch.stack(masks, dim=0)
@@ -255,7 +255,7 @@ def run_ppo(
         # restore RNG (important for reproducibility)
         # ---- restore CPU RNG ----
         rng_state = checkpoint["rng_state"]
-        rng_state = torch.tensor(rng_state, dtype=torch.uint8, device="cpu")
+        rng_state = rng_state.clone().detach().to(torch.uint8)
         torch.set_rng_state(rng_state)
 
 
@@ -263,7 +263,8 @@ def run_ppo(
         cuda_rng_state = checkpoint["cuda_rng_state"]
 
         fixed_cuda_states = [
-            torch.tensor(s, dtype=torch.uint8, device="cpu")
+            # torch.tensor(s, dtype=torch.uint8, device="cpu")
+            s.clone().detach().to(torch.uint8)
             for s in cuda_rng_state
         ]
 
